@@ -7,11 +7,27 @@ import (
 	"strings"
 	"time"
 
+	"github.com/usememos/memos/common/log"
 	"github.com/usememos/memos/common/util"
 )
 
 // Visibility is the type of a visibility.
 type Visibility string
+
+type HookType int
+
+const (
+	HOOK_ADD HookType = iota + 1
+	HOOK_DELETED
+	HOOK_MODIFIED
+	HOOK_ENABLED
+	HOOK_DISABLED
+)
+
+type HookTrigger struct {
+	MemoID   int32
+	HookType HookType
+}
 
 const (
 	// Public is the PUBLIC visibility.
@@ -84,6 +100,8 @@ type DeleteMemo struct {
 	ID int32
 }
 
+var HookTriggers chan HookTrigger
+
 func (s *Store) CreateMemo(ctx context.Context, create *Memo) (*Memo, error) {
 	if create.CreatedTs == 0 {
 		create.CreatedTs = time.Now().Unix()
@@ -116,6 +134,13 @@ func (s *Store) CreateMemo(ctx context.Context, create *Memo) (*Memo, error) {
 	}
 
 	memo := create
+
+	log.Info(fmt.Sprintf("send hook: %d", create.ID))
+	HookTriggers <- HookTrigger{
+		MemoID:   memo.ID,
+		HookType: HOOK_ADD,
+	}
+
 	return memo, nil
 }
 

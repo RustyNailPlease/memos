@@ -138,6 +138,17 @@ export function deleteMemo(memoId: MemoId) {
   return axios.delete(`/api/v1/memo/${memoId}`);
 }
 
+
+export function createMemoHook(hookCreate: MemoHookCreate) {
+  return axios.post<MemoHook>("/api/v1/memohook", hookCreate);
+}
+export function deleteMemoHook(hookId: number) {
+  return axios.delete<MemoHook>(`/api/v1/memohook/${hookId}`);
+}
+export async function getMemoHookList() {
+  return axios.get<MemoHook[]>(`/api/v1/memohook`);
+}
+
 export function getResourceList() {
   return axios.get<Resource[]>("/api/v1/resource");
 }

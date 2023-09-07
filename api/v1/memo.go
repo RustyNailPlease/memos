@@ -799,7 +799,7 @@ func (s *APIV1Service) convertMemoFromStore(ctx context.Context, memo *store.Mem
 			return nil, err
 		}
 		if resource != nil {
-			resourceList = append(resourceList, convertResourceFromStore(resource))
+			resourceList = append(resourceList, ConvertResourceFromStore(resource))
 		}
 	}
 	memoResponse.ResourceList = resourceList

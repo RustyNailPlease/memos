@@ -66,7 +66,7 @@ func (s *APIV1Service) GetMemoResourceList(c echo.Context) error {
 	}
 	resourceList := []*Resource{}
 	for _, resource := range list {
-		resourceList = append(resourceList, convertResourceFromStore(resource))
+		resourceList = append(resourceList, ConvertResourceFromStore(resource))
 	}
 	return c.JSON(http.StatusOK, resourceList)
 }

@@ -7,13 +7,14 @@ import MemberSection from "@/components/Settings/MemberSection";
 import MyAccountSection from "@/components/Settings/MyAccountSection";
 import PreferencesSection from "@/components/Settings/PreferencesSection";
 import SSOSection from "@/components/Settings/SSOSection";
+import HookSection from "@/components/Settings/HookSection";
 import StorageSection from "@/components/Settings/StorageSection";
 import SystemSection from "@/components/Settings/SystemSection";
 import { useUserStore } from "@/store/module";
 import { useTranslate } from "@/utils/i18n";
 import "@/less/setting.less";
 
-type SettingSection = "my-account" | "preference" | "member" | "system" | "storage" | "sso";
+type SettingSection = "my-account" | "preference" | "member" | "system" | "storage" | "sso" | "hook";
 
 interface State {
   selectedSection: SettingSection;
@@ -90,6 +91,12 @@ const Setting = () => {
                 >
                   <Icon.Key className="w-4 h-auto mr-2 opacity-80" /> {t("setting.sso")} <BetaBadge />
                 </span>
+                <span
+                  onClick={() => handleSectionSelectorItemClick("hook")}
+                  className={`section-item ${state.selectedSection === "sso" ? "selected" : ""}`}
+                >
+                  <Icon.Webhook className="w-4 h-auto mr-2 opacity-80" /> {t("setting.hook")} <BetaBadge />
+                </span>
               </div>
             </>
           ) : null}
@@ -118,7 +125,10 @@ const Setting = () => {
             <StorageSection />
           ) : state.selectedSection === "sso" ? (
             <SSOSection />
-          ) : null}
+          ) : state.selectedSection === "hook" ? (
+            <HookSection />
+          ) 
+          : null}
         </div>
       </div>
     </section>

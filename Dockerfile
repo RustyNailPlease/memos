@@ -13,7 +13,7 @@ RUN pnpm build
 # Build backend exec file.
 FROM golang:1.21-alpine AS backend
 WORKDIR /backend-build
-
+RUN go env -w GOPROXY=https://goproxy.cn,direct
 COPY . .
 COPY --from=frontend /frontend-build/dist ./server/dist
 
@@ -21,6 +21,8 @@ RUN CGO_ENABLED=0 go build -o memos ./main.go
 
 # Make workspace with above generated files.
 FROM alpine:latest AS monolithic
+RUN set -eux && sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+
 WORKDIR /usr/local/memos
 
 RUN apk add --no-cache tzdata

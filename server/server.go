@@ -33,9 +33,11 @@ type Server struct {
 	Store   *store.Store
 
 	// API services.
+	apiV1Service *apiv1.APIV1Service
 	apiV2Service *apiv2.APIV2Service
 
 	// Asynchronous runners.
+	hookCaller   *service.HookCaller
 	backupRunner *service.BackupRunner
 	telegramBot  *telegram.Bot
 }
@@ -53,6 +55,7 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 
 		// Asynchronous runners.
 		backupRunner: service.NewBackupRunner(store),
+		hookCaller:   service.NewHookCaller(context.Background(), store),
 		telegramBot:  telegram.NewBotWithHandler(newTelegramHandler(store)),
 	}
 
@@ -119,6 +122,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go s.telegramBot.Start(ctx)
 	go s.backupRunner.Run(ctx)
+	go s.hookCaller.Run()
 
 	// Start gRPC server.
 	listen, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.Profile.Addr, s.Profile.Port+1))

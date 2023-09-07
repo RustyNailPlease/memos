@@ -3,6 +3,8 @@ package v1
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,6 +31,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	PRISIGN_CODE = "memos_presign_codexxxxxxxxxxxxxxxxxxxx"
+)
+
 type Resource struct {
 	ID int32 `json:"id"`
 
@@ -44,7 +50,7 @@ type Resource struct {
 	ExternalLink string `json:"externalLink"`
 	Type         string `json:"type"`
 	Size         int64  `json:"size"`
-
+	PreSign      string `json:"presign"`
 	// Related fields
 	LinkedMemoAmount int `json:"linkedMemoAmount"`
 }
@@ -65,6 +71,66 @@ type FindResourceRequest struct {
 
 type UpdateResourceRequest struct {
 	Filename *string `json:"filename"`
+}
+
+type PreSign struct {
+	Expired int64
+	RID     int32
+	Sign    string
+}
+
+func ToPreSign(signString string) (*PreSign, error) {
+	if signString == "" {
+		return nil, errors.New("sign length wrong")
+	}
+
+	splits := strings.Split(signString, ",")
+
+	if len(splits) != 3 {
+		return nil, errors.New("sign length wrong")
+	}
+
+	exp, err := strconv.ParseInt(splits[0], 10, 64)
+	if err != nil {
+		return nil, err
+	}
+	rid, err := strconv.ParseInt(splits[1], 10, 32)
+	if err != nil {
+		return nil, err
+	}
+	return &PreSign{
+		Expired: exp,
+		RID:     int32(rid),
+		Sign:    splits[2],
+	}, nil
+}
+
+func (ps *PreSign) CheckSign() (bool, error) {
+	now := time.Now().UnixMilli()
+	if now > ps.Expired {
+		return false, errors.New("expired")
+	}
+
+	checkSign := ps.GetSign()
+	checkSignSplit := strings.Split(checkSign, ",")[2]
+	if checkSignSplit != ps.Sign {
+		return false, errors.New("sign string wrong")
+	}
+
+	return true, nil
+}
+
+func (ps *PreSign) GetSign() string {
+	signCode := os.Getenv("PRESIGN_CODE")
+	if signCode == "" {
+		signCode = PRISIGN_CODE
+	}
+
+	signString := fmt.Sprintf("%d,%d,%s", ps.Expired, ps.RID, signCode)
+	signBytes := md5.New().Sum([]byte(signString))
+	sign := base64.StdEncoding.EncodeToString(signBytes)
+
+	return fmt.Sprintf("%d,%d,%s", ps.Expired, ps.RID, sign)
 }
 
 const (
@@ -91,6 +157,7 @@ func (s *APIV1Service) registerResourceRoutes(g *echo.Group) {
 func (s *APIV1Service) registerResourcePublicRoutes(g *echo.Group) {
 	g.GET("/r/:resourceId", s.streamResource)
 	g.GET("/r/:resourceId/*", s.streamResource)
+	g.GET("/presign/r/:resourceId", s.streamPresignResource)
 }
 
 // GetResourceList godoc
@@ -127,7 +194,7 @@ func (s *APIV1Service) GetResourceList(c echo.Context) error {
 	}
 	resourceMessageList := []*Resource{}
 	for _, resource := range list {
-		resourceMessageList = append(resourceMessageList, convertResourceFromStore(resource))
+		resourceMessageList = append(resourceMessageList, ConvertResourceFromStore(resource))
 	}
 	return c.JSON(http.StatusOK, resourceMessageList)
 }
@@ -216,7 +283,7 @@ func (s *APIV1Service) CreateResource(c echo.Context) error {
 	if err := s.createResourceCreateActivity(ctx, resource); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create activity").SetInternal(err)
 	}
-	return c.JSON(http.StatusOK, convertResourceFromStore(resource))
+	return c.JSON(http.StatusOK, ConvertResourceFromStore(resource))
 }
 
 // UploadResource godoc
@@ -289,7 +356,7 @@ func (s *APIV1Service) UploadResource(c echo.Context) error {
 	if err := s.createResourceCreateActivity(ctx, resource); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to create activity").SetInternal(err)
 	}
-	return c.JSON(http.StatusOK, convertResourceFromStore(resource))
+	return c.JSON(http.StatusOK, ConvertResourceFromStore(resource))
 }
 
 // DeleteResource godoc
@@ -405,7 +472,7 @@ func (s *APIV1Service) UpdateResource(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to patch resource").SetInternal(err)
 	}
-	return c.JSON(http.StatusOK, convertResourceFromStore(resource))
+	return c.JSON(http.StatusOK, ConvertResourceFromStore(resource))
 }
 
 // streamResource godoc
@@ -454,6 +521,72 @@ func (s *APIV1Service) streamResource(c echo.Context) error {
 	// Private resource require logined user is the creator
 	if resourceVisibility == store.Private && (!ok || userID != resource.CreatorID) {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Resource visibility not match").SetInternal(err)
+	}
+
+	blob := resource.Blob
+	if resource.InternalPath != "" {
+		resourcePath := resource.InternalPath
+		src, err := os.Open(resourcePath)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Failed to open the local resource: %s", resourcePath)).SetInternal(err)
+		}
+		defer src.Close()
+		blob, err = io.ReadAll(src)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Failed to read the local resource: %s", resourcePath)).SetInternal(err)
+		}
+	}
+
+	if c.QueryParam("thumbnail") == "1" && util.HasPrefixes(resource.Type, "image/png", "image/jpeg") {
+		ext := filepath.Ext(resource.Filename)
+		thumbnailPath := filepath.Join(s.Profile.Data, thumbnailImagePath, fmt.Sprintf("%d%s", resource.ID, ext))
+		thumbnailBlob, err := getOrGenerateThumbnailImage(blob, thumbnailPath)
+		if err != nil {
+			log.Warn(fmt.Sprintf("failed to get or generate local thumbnail with path %s", thumbnailPath), zap.Error(err))
+		} else {
+			blob = thumbnailBlob
+		}
+	}
+
+	c.Response().Writer.Header().Set(echo.HeaderCacheControl, "max-age=31536000, immutable")
+	c.Response().Writer.Header().Set(echo.HeaderContentSecurityPolicy, "default-src 'self'")
+	resourceType := strings.ToLower(resource.Type)
+	if strings.HasPrefix(resourceType, "text") {
+		resourceType = echo.MIMETextPlainCharsetUTF8
+	} else if strings.HasPrefix(resourceType, "video") || strings.HasPrefix(resourceType, "audio") {
+		http.ServeContent(c.Response(), c.Request(), resource.Filename, time.Unix(resource.UpdatedTs, 0), bytes.NewReader(blob))
+		return nil
+	}
+	c.Response().Writer.Header().Set("Content-Disposition", fmt.Sprintf(`filename="%s"`, resource.Filename))
+	return c.Stream(http.StatusOK, resourceType, bytes.NewReader(blob))
+}
+
+func (s *APIV1Service) streamPresignResource(c echo.Context) error {
+	ctx := c.Request().Context()
+	resourceID, err := util.ConvertStringToInt32(c.Param("resourceId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("ID is not a number: %s", c.Param("resourceId"))).SetInternal(err)
+	}
+
+	sign := c.QueryParam("sign")
+	ps, err := ToPreSign(sign)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("sign check error: %s", sign))
+	}
+	_, err = ps.CheckSign()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("sign check error: %s", err.Error()))
+	}
+
+	resource, err := s.Store.GetResource(ctx, &store.FindResource{
+		ID:      &resourceID,
+		GetBlob: true,
+	})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Failed to find resource by ID: %v", resourceID)).SetInternal(err)
+	}
+	if resource == nil {
+		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("Resource not found: %d", resourceID))
 	}
 
 	blob := resource.Blob
@@ -628,7 +761,13 @@ func checkResourceVisibility(ctx context.Context, s *store.Store, resourceID int
 	return store.Private, nil
 }
 
-func convertResourceFromStore(resource *store.Resource) *Resource {
+func ConvertResourceFromStore(resource *store.Resource) *Resource {
+
+	ps := &PreSign{
+		Expired: time.Now().Add(30 * time.Minute).UnixMilli(),
+		RID:     resource.ID,
+	}
+
 	return &Resource{
 		ID:               resource.ID,
 		CreatorID:        resource.CreatorID,
@@ -640,6 +779,7 @@ func convertResourceFromStore(resource *store.Resource) *Resource {
 		ExternalLink:     resource.ExternalLink,
 		Type:             resource.Type,
 		Size:             resource.Size,
+		PreSign:          ps.GetSign(),
 		LinkedMemoAmount: resource.LinkedMemoAmount,
 	}
 }
