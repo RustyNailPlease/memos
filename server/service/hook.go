@@ -38,7 +38,7 @@ func (hc *HookCaller) call(memoID int32, creatorID int32, hookType store.HookTyp
 	// magic
 	time.Sleep(10 * time.Second)
 
-	if hookType == store.HOOK_MODIFIED {
+	if hookType == store.HOOK_DELETED {
 		hooks, err := hc.Store.FindMemoHooks(hc.ctx, &store.MemoHook{CreatorID: creatorID})
 
 		if err != nil {
@@ -53,6 +53,7 @@ func (hc *HookCaller) call(memoID int32, creatorID int32, hookType store.HookTyp
 		hc.callHookURLDEL(hooks, &v1.Memo{
 			ID: memoID,
 		})
+		return
 	}
 
 	memo, err := hc.Store.GetMemo(hc.ctx, &store.FindMemo{ID: &memoID})
