@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -28,22 +27,46 @@ type HookData[T any] struct {
 	Data T
 }
 
-func (hc *HookCaller) Trigger(t store.HookTrigger) {
-	store.HookTriggers <- t
-}
-
 func (hc *HookCaller) Run() {
 	log.Info("start hook runner")
 	for t := range store.HookTriggers {
-		time.Sleep(10 * time.Second)
-		go hc.call(t.MemoID, t.HookType)
+		go hc.call(t.MemoID, t.MemoCreator, t.HookType)
 	}
 }
 
-func (hc *HookCaller) call(memoID int32, hookType store.HookType) {
+func (hc *HookCaller) call(memoID int32, creatorID int32, hookType store.HookType) {
+	// magic
+	time.Sleep(10 * time.Second)
+
+	if hookType == store.HOOK_MODIFIED {
+		hooks, err := hc.Store.FindMemoHooks(hc.ctx, &store.MemoHook{CreatorID: creatorID})
+
+		if err != nil {
+			log.Error(err.Error())
+			return
+		}
+
+		if len(hooks) == 0 {
+			return
+		}
+
+		hc.callHookURLDEL(hooks, &v1.Memo{
+			ID: memoID,
+		})
+	}
+
 	memo, err := hc.Store.GetMemo(hc.ctx, &store.FindMemo{ID: &memoID})
 	if err != nil {
 		log.Error(err.Error())
+		return
+	}
+
+	hooks, err := hc.Store.FindMemoHooks(hc.ctx, &store.MemoHook{CreatorID: memo.CreatorID})
+	if err != nil {
+		log.Error(err.Error())
+		return
+	}
+	if len(hooks) == 0 {
 		return
 	}
 
@@ -71,45 +94,20 @@ func (hc *HookCaller) call(memoID int32, hookType store.HookType) {
 	}
 
 	memoResponse.ResourceList = resourceList
-	hooks, err := hc.Store.FindMemoHooks(hc.ctx, &store.MemoHook{CreatorID: memo.CreatorID})
-	if err != nil {
-		log.Error(err.Error())
-		return
-	}
-
-	if len(hooks) == 0 {
-		return
-	}
 
 	if hookType == store.HOOK_ADD {
-		hc.callHookUrlAdd(hooks, memoResponse)
+		hc.callHookURLAdd(hooks, memoResponse)
 		return
 	}
 
-	// switch hookType {
-	// case store.HOOK_ADD:
+	if hookType == store.HOOK_MODIFIED {
+		hc.callHookURLMod(hooks, memoResponse)
+	}
 
-	// 	break
-	// case store.HOOK_DELETED:
-	// 	callHookUrlDEL(hooks, memo)
-	// 	break
-	// case store.HOOK_MODIFIED:
-	// 	callHookUrlMod(hooks, memo)
-	// 	break
-	// case store.HOOK_ENABLED:
-	// 	callHookUrlEnable(hooks, memo)
-	// 	break
-	// case store.HOOK_DISABLED:
-	// 	callHookUrlDisable(hooks, memo)
-	// 	break
-	// default:
-	// 	break
-	// }
 }
 
-func (hc *HookCaller) callHookUrlAdd(hooks []store.MemoHook, memo *v1.Memo) {
+func (hc *HookCaller) callHookURLAdd(hooks []store.MemoHook, memo *v1.Memo) {
 	for _, hook := range hooks {
-		log.Info(fmt.Sprintf("try to send %s --> %s", memo.Content, hook.Name))
 		data := HookData[v1.Memo]{
 			Data: *memo,
 			Type: store.HOOK_ADD,
@@ -132,21 +130,61 @@ func (hc *HookCaller) callHookUrlAdd(hooks []store.MemoHook, memo *v1.Memo) {
 	}
 }
 
-func callHookUrlMod(hooks []store.MemoHook, memo *store.Memo) {
-
+func (hc *HookCaller) callHookURLMod(hooks []store.MemoHook, memo *v1.Memo) {
+	for _, hook := range hooks {
+		data := HookData[v1.Memo]{
+			Data: *memo,
+			Type: store.HOOK_MODIFIED,
+		}
+		buf, err := json.Marshal(data)
+		if err != nil {
+			log.Error(err.Error())
+			continue
+		}
+		req, err := http.NewRequest(http.MethodPost, hook.Url, bytes.NewBuffer(buf))
+		if err != nil {
+			log.Error(err.Error())
+			continue
+		}
+		// retry
+		_, err = hc.httpClient.Do(req)
+		if err != nil {
+			continue
+		}
+	}
 }
 
-func callHookUrlDEL(hooks []store.MemoHook, memo *store.Memo) {
-
+func (hc *HookCaller) callHookURLDEL(hooks []store.MemoHook, memo *v1.Memo) {
+	for _, hook := range hooks {
+		data := HookData[v1.Memo]{
+			Data: *memo,
+			Type: store.HOOK_DELETED,
+		}
+		buf, err := json.Marshal(data)
+		if err != nil {
+			log.Error(err.Error())
+			continue
+		}
+		req, err := http.NewRequest(http.MethodPost, hook.Url, bytes.NewBuffer(buf))
+		if err != nil {
+			log.Error(err.Error())
+			continue
+		}
+		// retry
+		_, err = hc.httpClient.Do(req)
+		if err != nil {
+			continue
+		}
+	}
 }
 
-func callHookUrlEnable(hooks []store.MemoHook, memo *store.Memo) {
+// func callHookUrlEnable(hooks []store.MemoHook, memo *store.Memo) {
+// todo
+// }
 
-}
-
-func callHookUrlDisable(hooks []store.MemoHook, memo *store.Memo) {
-
-}
+// func callHookUrlDisable(hooks []store.MemoHook, memo *store.Memo) {
+// todo
+// }
 
 func NewHookCaller(ctx context.Context, st *store.Store) *HookCaller {
 

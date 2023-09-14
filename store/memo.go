@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/usememos/memos/common/log"
 	"github.com/usememos/memos/common/util"
 )
 
@@ -25,8 +24,9 @@ const (
 )
 
 type HookTrigger struct {
-	MemoID   int32
-	HookType HookType
+	MemoID      int32
+	MemoCreator int32
+	HookType    HookType
 }
 
 const (
@@ -97,7 +97,8 @@ type UpdateMemo struct {
 }
 
 type DeleteMemo struct {
-	ID int32
+	ID        int32
+	CreatorID int32
 }
 
 var HookTriggers chan HookTrigger
@@ -135,7 +136,6 @@ func (s *Store) CreateMemo(ctx context.Context, create *Memo) (*Memo, error) {
 
 	memo := create
 
-	log.Info(fmt.Sprintf("send hook: %d", create.ID))
 	HookTriggers <- HookTrigger{
 		MemoID:   memo.ID,
 		HookType: HOOK_ADD,
@@ -324,6 +324,12 @@ func (s *Store) UpdateMemo(ctx context.Context, update *UpdateMemo) error {
 	if _, err := s.db.ExecContext(ctx, stmt, args...); err != nil {
 		return err
 	}
+
+	HookTriggers <- HookTrigger{
+		MemoID:   update.ID,
+		HookType: HOOK_MODIFIED,
+	}
+
 	return nil
 }
 
@@ -341,6 +347,13 @@ func (s *Store) DeleteMemo(ctx context.Context, delete *DeleteMemo) error {
 		// Prevent linter warning.
 		return err
 	}
+
+	HookTriggers <- HookTrigger{
+		MemoID:      delete.ID,
+		MemoCreator: delete.CreatorID,
+		HookType:    HOOK_DELETED,
+	}
+
 	return nil
 }
 

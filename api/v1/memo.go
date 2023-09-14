@@ -571,7 +571,8 @@ func (s *APIV1Service) DeleteMemo(c echo.Context) error {
 	}
 
 	if err := s.Store.DeleteMemo(ctx, &store.DeleteMemo{
-		ID: memoID,
+		ID:        memoID,
+		CreatorID: userID,
 	}); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, fmt.Sprintf("Failed to delete memo ID: %v", memoID)).SetInternal(err)
 	}
