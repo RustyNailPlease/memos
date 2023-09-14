@@ -2,9 +2,9 @@ import { omit } from "lodash-es";
 import * as api from "@/helpers/api";
 import { DEFAULT_MEMO_LIMIT } from "@/helpers/consts";
 import store, { useAppSelector } from "../";
-import { createMemo, deleteMemo, patchMemo, setIsFetching, upsertMemos } from "../reducer/memo";
+import { createMemo, deleteMemo, patchMemo, upsertMemos } from "../reducer/memo";
 import { useMemoCacheStore } from "../v1";
-import { useUserStore } from "./";
+import { getUsernameFromPath, useUserStore } from "./";
 
 export const convertResponseModelMemo = (memo: Memo): Memo => {
   return {
@@ -34,38 +34,31 @@ export const useMemoStore = () => {
       return store.getState().memo;
     },
     fetchMemos: async (limit = DEFAULT_MEMO_LIMIT, offset = 0) => {
-      store.dispatch(setIsFetching(true));
       const memoFind: MemoFind = {
         rowStatus: "NORMAL",
         limit,
         offset,
       };
       if (userStore.isVisitorMode()) {
-        memoFind.creatorUsername = userStore.getUsernameFromPath();
+        memoFind.creatorUsername = getUsernameFromPath();
       }
       const { data } = await api.getMemoList(memoFind);
       const fetchedMemos = data.map((m) => convertResponseModelMemo(m));
       store.dispatch(upsertMemos(fetchedMemos));
-      store.dispatch(setIsFetching(false));
-
       for (const m of fetchedMemos) {
         memoCacheStore.setMemoCache(m);
       }
-
       return fetchedMemos;
     },
     fetchAllMemos: async (limit = DEFAULT_MEMO_LIMIT, offset?: number) => {
-      store.dispatch(setIsFetching(true));
       const memoFind: MemoFind = {
         rowStatus: "NORMAL",
         limit,
         offset,
       };
-
       const { data } = await api.getAllMemos(memoFind);
       const fetchedMemos = data.map((m) => convertResponseModelMemo(m));
       store.dispatch(upsertMemos(fetchedMemos));
-      store.dispatch(setIsFetching(false));
 
       for (const m of fetchedMemos) {
         memoCacheStore.setMemoCache(m);
@@ -77,9 +70,6 @@ export const useMemoStore = () => {
       const memoFind: MemoFind = {
         rowStatus: "ARCHIVED",
       };
-      if (userStore.isVisitorMode()) {
-        memoFind.creatorUsername = userStore.getUsernameFromPath();
-      }
       const { data } = await api.getMemoList(memoFind);
       const archivedMemos = data.map((m) => {
         return convertResponseModelMemo(m);

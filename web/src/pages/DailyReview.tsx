@@ -11,6 +11,7 @@ import showPreviewImageDialog from "@/components/PreviewImageDialog";
 import DatePicker from "@/components/kit/DatePicker";
 import { DAILY_TIMESTAMP, DEFAULT_MEMO_LIMIT } from "@/helpers/consts";
 import { convertToMillis, getDateStampByDate, getNormalizedDateString, getTimeStampByDate, isFutureDate } from "@/helpers/datetime";
+import useCurrentUser from "@/hooks/useCurrentUser";
 import i18n from "@/i18n";
 import toImage from "@/labs/html2image";
 import { useMemoStore, useUserStore } from "@/store/module";
@@ -20,6 +21,7 @@ const DailyReview = () => {
   const t = useTranslate();
   const memoStore = useMemoStore();
   const userStore = useUserStore();
+  const user = useCurrentUser();
   const { localSetting } = userStore.state.user as User;
   const [currentDateStamp, setCurrentDateStamp] = useState(getDateStampByDate(getNormalizedDateString()));
   const [showDatePicker, toggleShowDatePicker] = useToggle(false);
@@ -31,11 +33,18 @@ const DailyReview = () => {
       const currentDateStampWithOffset = currentDateStamp + convertToMillis(localSetting);
       return (
         m.rowStatus === "NORMAL" &&
+        m.creatorUsername === user.username &&
         displayTimestamp >= currentDateStampWithOffset &&
         displayTimestamp < currentDateStampWithOffset + DAILY_TIMESTAMP
       );
     })
     .sort((a, b) => getTimeStampByDate(a.displayTs) - getTimeStampByDate(b.displayTs));
+
+  useEffect(() => {
+    if (!user) {
+      window.location.href = "/auth";
+    }
+  }, []);
 
   useEffect(() => {
     let offset = 0;
@@ -75,7 +84,7 @@ const DailyReview = () => {
       });
   };
 
-  const handleDataPickerChange = (datestamp: DateStamp): void => {
+  const handleDataPickerChange = (datestamp: number): void => {
     setCurrentDateStamp(datestamp);
     toggleShowDatePicker(false);
   };
@@ -91,7 +100,7 @@ const DailyReview = () => {
       <div className="w-full flex flex-col justify-start items-start px-4 py-3 rounded-xl bg-white dark:bg-zinc-700 text-black dark:text-gray-300">
         <div className="relative w-full flex flex-row justify-between items-center">
           <p
-            className="px-2 py-1 flex flex-row justify-start items-center cursor-pointer select-none rounded hover:bg-gray-100 dark:hover:bg-zinc-700"
+            className="px-2 py-1 flex flex-row justify-start items-center cursor-pointer select-none rounded opacity-80 hover:bg-gray-100 dark:hover:bg-zinc-700"
             onClick={() => toggleShowDatePicker()}
           >
             <Icon.Calendar className="w-5 h-auto mr-1" /> {t("daily-review.title")}

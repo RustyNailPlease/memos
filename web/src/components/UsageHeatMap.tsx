@@ -3,6 +3,7 @@ import { getMemoStats } from "@/helpers/api";
 import { DAILY_TIMESTAMP } from "@/helpers/consts";
 import { getDateStampByDate, getDateString, getTimeStampByDate } from "@/helpers/datetime";
 import * as utils from "@/helpers/utils";
+import { useUserV1Store } from "@/store/v1";
 import { useTranslate } from "@/utils/i18n";
 import { useFilterStore, useMemoStore, useUserStore } from "../store/module";
 import "@/less/usage-heat-map.less";
@@ -32,6 +33,7 @@ const UsageHeatMap = () => {
   const t = useTranslate();
   const filterStore = useFilterStore();
   const userStore = useUserStore();
+  const userV1Store = useUserV1Store();
   const memoStore = useMemoStore();
   const todayTimeStamp = getDateStampByDate(Date.now());
   const todayDay = new Date(todayTimeStamp).getDay() + 1;
@@ -47,15 +49,19 @@ const UsageHeatMap = () => {
   const currentUsername = userStore.getCurrentUsername();
 
   useEffect(() => {
-    userStore.getUserByUsername(currentUsername).then((user) => {
+    userV1Store.getOrFetchUserByUsername(currentUsername).then((user) => {
       if (!user) {
         return;
       }
-      setCreatedDays(Math.ceil((Date.now() - getTimeStampByDate(user.createdTs)) / 1000 / 3600 / 24));
+      setCreatedDays(Math.ceil((Date.now() - getTimeStampByDate(user.createTime)) / 1000 / 3600 / 24));
     });
   }, [currentUsername]);
 
   useEffect(() => {
+    if (memos.length === 0) {
+      return;
+    }
+
     getMemoStats(currentUsername)
       .then(({ data }) => {
         setMemoAmount(data.length);

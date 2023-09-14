@@ -11,8 +11,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/usememos/memos/api/auth"
+	"github.com/usememos/memos/common/log"
 	"github.com/usememos/memos/common/util"
 	"github.com/usememos/memos/store"
+	"go.uber.org/zap"
 )
 
 // Visibility is the type of a visibility.
@@ -351,6 +353,38 @@ func (s *APIV1Service) CreateMemo(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to compose memo response").SetInternal(err)
 	}
+
+	// send notification by telegram bot if memo is not Private
+	if memoResponse.Visibility != Private {
+		// fetch all telegram UserID
+		userSettings, err := s.Store.ListUserSettings(ctx, &store.FindUserSetting{Key: UserSettingTelegramUserIDKey.String()})
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to ListUserSettings").SetInternal(err)
+		}
+		for _, userSetting := range userSettings {
+			// parse telegram UserID setting value into a int64
+			var tgUserIDStr string
+			err := json.Unmarshal([]byte(userSetting.Value), &tgUserIDStr)
+			if err != nil {
+				log.Error("failed to parse Telegram UserID", zap.Error(err))
+				continue
+			}
+
+			tgUserID, err := strconv.ParseInt(tgUserIDStr, 10, 64)
+			if err != nil {
+				log.Error("failed to parse Telegram UserID", zap.Error(err))
+				continue
+			}
+
+			// send notification to telegram
+			content := memoResponse.CreatorName + " Says:\n\n" + memoResponse.Content
+			_, err = s.telegramBot.SendMessage(ctx, tgUserID, content)
+			if err != nil {
+				log.Error("Failed to send Telegram notification", zap.Error(err))
+				continue
+			}
+		}
+	}
 	return c.JSON(http.StatusOK, memoResponse)
 }
 
@@ -470,18 +504,16 @@ func (s *APIV1Service) GetMemoStats(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to find memo list").SetInternal(err)
 	}
-	memoResponseList := []*Memo{}
-	for _, memo := range list {
-		memoResponse, err := s.convertMemoFromStore(ctx, memo)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "Failed to compose memo response").SetInternal(err)
-		}
-		memoResponseList = append(memoResponseList, memoResponse)
-	}
 
 	displayTsList := []int64{}
-	for _, memo := range memoResponseList {
-		displayTsList = append(displayTsList, memo.DisplayTs)
+	if memoDisplayWithUpdatedTs {
+		for _, memo := range list {
+			displayTsList = append(displayTsList, memo.CreatedTs)
+		}
+	} else {
+		for _, memo := range list {
+			displayTsList = append(displayTsList, memo.UpdatedTs)
+		}
 	}
 	return c.JSON(http.StatusOK, displayTsList)
 }

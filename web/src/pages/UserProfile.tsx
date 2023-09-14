@@ -6,18 +6,21 @@ import MemoList from "@/components/MemoList";
 import UserAvatar from "@/components/UserAvatar";
 import useLoading from "@/hooks/useLoading";
 import { useUserStore } from "@/store/module";
+import { useUserV1Store } from "@/store/v1";
+import { User } from "@/types/proto/api/v2/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 
 const UserProfile = () => {
   const t = useTranslate();
   const userStore = useUserStore();
+  const userV1Store = useUserV1Store();
   const loadingState = useLoading();
   const [user, setUser] = useState<User>();
 
   useEffect(() => {
     const currentUsername = userStore.getCurrentUsername();
-    userStore
-      .getUserByUsername(currentUsername)
+    userV1Store
+      .getOrFetchUserByUsername(currentUsername)
       .then((user) => {
         setUser(user);
         loadingState.setFinish();
@@ -39,7 +42,7 @@ const UserProfile = () => {
                   <div className="w-full flex flex-row justify-start items-start">
                     <div className="flex-grow shrink w-full">
                       <div className="w-full flex flex-col justify-start items-center py-8">
-                        <UserAvatar className="w-16 h-auto mb-4 drop-shadow" avatarUrl={user?.avatarUrl} />
+                        <UserAvatar className="!w-20 h-auto mb-4 drop-shadow" avatarUrl={user?.avatarUrl} />
                         <div>
                           <p className="text-2xl font-bold text-gray-700 dark:text-gray-300">{user?.nickname}</p>
                         </div>

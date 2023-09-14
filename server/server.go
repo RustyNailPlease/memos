@@ -32,8 +32,6 @@ type Server struct {
 	Profile *profile.Profile
 	Store   *store.Store
 
-	// API services.
-	apiV1Service *apiv1.APIV1Service
 	apiV2Service *apiv2.APIV2Service
 
 	// Asynchronous runners.
@@ -48,6 +46,7 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 	e.HideBanner = true
 	e.HidePort = true
 
+	telegramBot := telegram.NewBotWithHandler(newTelegramHandler(store))
 	s := &Server{
 		e:       e,
 		Store:   store,
@@ -106,7 +105,7 @@ func NewServer(ctx context.Context, profile *profile.Profile, store *store.Store
 	s.Secret = secret
 
 	rootGroup := e.Group("")
-	apiV1Service := apiv1.NewAPIV1Service(s.Secret, profile, store)
+	apiV1Service := apiv1.NewAPIV1Service(s.Secret, profile, store, telegramBot)
 	apiV1Service.Register(rootGroup)
 
 	s.apiV2Service = apiv2.NewAPIV2Service(s.Secret, profile, store, s.Profile.Port+1)

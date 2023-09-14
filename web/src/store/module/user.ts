@@ -5,7 +5,7 @@ import storage from "@/helpers/storage";
 import { getSystemColorScheme } from "@/helpers/utils";
 import store, { useAppSelector } from "..";
 import { setAppearance, setLocale } from "../reducer/global";
-import { patchUser, setHost, setUser, setUserById } from "../reducer/user";
+import { patchUser, setHost, setUser } from "../reducer/user";
 
 const defaultSetting: Setting = {
   locale: "en",
@@ -68,17 +68,8 @@ export const initialUserState = async () => {
     if (user.setting.appearance) {
       store.dispatch(setAppearance(user.setting.appearance));
     }
+    return user;
   }
-};
-
-const getUsernameFromPath = () => {
-  const pathname = window.location.pathname;
-  const usernameRegex = /^\/u\/(\w+).*/;
-  const result = pathname.match(usernameRegex);
-  if (result && result.length === 2) {
-    return String(result[1]);
-  }
-  return undefined;
 };
 
 const doSignIn = async () => {
@@ -95,6 +86,16 @@ const doSignOut = async () => {
   await api.signout();
 };
 
+export const getUsernameFromPath = () => {
+  const pathname = window.location.pathname;
+  const usernameRegex = /^\/u\/(\w+).*/;
+  const result = pathname.match(usernameRegex);
+  if (result && result.length === 2) {
+    return String(result[1]);
+  }
+  return undefined;
+};
+
 export const useUserStore = () => {
   const state = useAppSelector((state) => state.user);
 
@@ -108,7 +109,6 @@ export const useUserStore = () => {
       return store.getState().user;
     },
     isVisitorMode,
-    getUsernameFromPath,
     doSignIn,
     doSignOut,
     getCurrentUsername: () => {
@@ -116,16 +116,6 @@ export const useUserStore = () => {
         return getUsernameFromPath() || UNKNOWN_USERNAME;
       } else {
         return state.user?.username || UNKNOWN_USERNAME;
-      }
-    },
-    getUserByUsername: async (username: string) => {
-      const { data } = await api.getUserByUsername(username);
-      if (data) {
-        const user = convertResponseModelUser(data);
-        store.dispatch(setUserById(user));
-        return user;
-      } else {
-        return undefined;
       }
     },
     upsertUserSetting: async (key: string, value: any) => {

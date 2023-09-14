@@ -3,8 +3,8 @@ type ResourceId = number;
 interface Resource {
   id: ResourceId;
 
-  createdTs: TimeStamp;
-  updatedTs: TimeStamp;
+  createdTs: number;
+  updatedTs: number;
 
   filename: string;
   externalLink: string;
@@ -18,7 +18,6 @@ interface ResourceCreate {
   filename: string;
   externalLink: string;
   type: string;
-  downloadToLocal: boolean;
 }
 
 interface ResourcePatch {

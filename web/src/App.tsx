@@ -1,19 +1,43 @@
 import { useColorScheme } from "@mui/joy";
-import { Suspense, useEffect } from "react";
-import { Toaster } from "react-hot-toast";
+import { Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RouterProvider } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import storage from "./helpers/storage";
 import { getSystemColorScheme } from "./helpers/utils";
 import Loading from "./pages/Loading";
-import router from "./router";
-import { useGlobalStore } from "./store/module";
+import { initialGlobalState, initialUserState, useGlobalStore } from "./store/module";
+import { useUserV1Store } from "./store/v1";
 
 const App = () => {
   const { i18n } = useTranslation();
   const globalStore = useGlobalStore();
   const { mode, setMode } = useColorScheme();
+  const userV1Store = useUserV1Store();
+  const [loading, setLoading] = useState(true);
   const { appearance, locale, systemStatus } = globalStore.state;
+
+  useEffect(() => {
+    const initialState = async () => {
+      try {
+        await initialGlobalState();
+      } catch (error) {
+        // do nothing
+      }
+
+      try {
+        const user = await initialUserState();
+        if (user) {
+          await userV1Store.getOrFetchUserByUsername(user.username);
+        }
+      } catch (error) {
+        // do nothing.
+      }
+
+      setLoading(false);
+    };
+
+    initialState();
+  }, []);
 
   useEffect(() => {
     const darkMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -35,7 +59,6 @@ const App = () => {
     }
   }, []);
 
-  // Inject additional style and script codes.
   useEffect(() => {
     if (systemStatus.additionalStyle) {
       const styleEl = document.createElement("style");
@@ -43,17 +66,22 @@ const App = () => {
       styleEl.setAttribute("type", "text/css");
       document.body.insertAdjacentElement("beforeend", styleEl);
     }
+  }, [systemStatus.additionalStyle]);
+
+  useEffect(() => {
     if (systemStatus.additionalScript) {
       const scriptEl = document.createElement("script");
       scriptEl.innerHTML = systemStatus.additionalScript;
       document.head.appendChild(scriptEl);
     }
+  }, [systemStatus.additionalScript]);
 
+  useEffect(() => {
     // dynamic update metadata with customized profile.
     document.title = systemStatus.customizedProfile.name;
     const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
     link.href = systemStatus.customizedProfile.logoUrl || "/logo.webp";
-  }, [systemStatus]);
+  }, [systemStatus.customizedProfile]);
 
   useEffect(() => {
     document.documentElement.setAttribute("lang", locale);
@@ -85,10 +113,11 @@ const App = () => {
     }
   }, [mode]);
 
-  return (
+  return loading ? (
+    <Loading />
+  ) : (
     <Suspense fallback={<Loading />}>
-      <RouterProvider router={router} />
-      <Toaster position="top-right" />
+      <Outlet />
     </Suspense>
   );
 };
