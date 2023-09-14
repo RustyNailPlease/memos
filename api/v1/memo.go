@@ -10,7 +10,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/usememos/memos/api/auth"
 	"github.com/usememos/memos/common/log"
 	"github.com/usememos/memos/common/util"
 	"github.com/usememos/memos/store"
@@ -157,7 +156,7 @@ func (s *APIV1Service) GetMemoList(c echo.Context) error {
 		}
 	}
 
-	currentUserID, ok := c.Get(auth.UserIDContextKey).(int32)
+	currentUserID, ok := c.Get(userIDContextKey).(int32)
 	if !ok {
 		// Anonymous use should only fetch PUBLIC memos with specified user
 		if findMemoMessage.CreatorID == nil {
@@ -248,7 +247,7 @@ func (s *APIV1Service) GetMemoList(c echo.Context) error {
 // - It's currently possible to create phantom resources and relations. Phantom relations will trigger backend 404's when fetching memo.
 func (s *APIV1Service) CreateMemo(c echo.Context) error {
 	ctx := c.Request().Context()
-	userID, ok := c.Get(auth.UserIDContextKey).(int32)
+	userID, ok := c.Get(userIDContextKey).(int32)
 	if !ok {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Missing user in session")
 	}
@@ -408,7 +407,7 @@ func (s *APIV1Service) CreateMemo(c echo.Context) error {
 func (s *APIV1Service) GetAllMemos(c echo.Context) error {
 	ctx := c.Request().Context()
 	findMemoMessage := &store.FindMemo{}
-	_, ok := c.Get(auth.UserIDContextKey).(int32)
+	_, ok := c.Get(userIDContextKey).(int32)
 	if !ok {
 		findMemoMessage.VisibilityList = []store.Visibility{store.Public}
 	} else {
@@ -482,7 +481,7 @@ func (s *APIV1Service) GetMemoStats(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "Missing user id to find memo")
 	}
 
-	currentUserID, ok := c.Get(auth.UserIDContextKey).(int32)
+	currentUserID, ok := c.Get(userIDContextKey).(int32)
 	if !ok {
 		findMemoMessage.VisibilityList = []store.Visibility{store.Public}
 	} else {
@@ -549,7 +548,7 @@ func (s *APIV1Service) GetMemo(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("Memo not found: %d", memoID))
 	}
 
-	userID, ok := c.Get(auth.UserIDContextKey).(int32)
+	userID, ok := c.Get(userIDContextKey).(int32)
 	if memo.Visibility == store.Private {
 		if !ok || memo.CreatorID != userID {
 			return echo.NewHTTPError(http.StatusForbidden, "this memo is private only")
@@ -607,7 +606,7 @@ func (s *APIV1Service) HookSyncMemo(c echo.Context) error {
 //	@Router		/api/v1/memo/{memoId} [DELETE]
 func (s *APIV1Service) DeleteMemo(c echo.Context) error {
 	ctx := c.Request().Context()
-	userID, ok := c.Get(auth.UserIDContextKey).(int32)
+	userID, ok := c.Get(userIDContextKey).(int32)
 	if !ok {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Missing user in session")
 	}
@@ -661,7 +660,7 @@ func (s *APIV1Service) DeleteMemo(c echo.Context) error {
 // - Passing 0 to createdTs and updatedTs will set them to 0 in the database, which is probably unwanted.
 func (s *APIV1Service) UpdateMemo(c echo.Context) error {
 	ctx := c.Request().Context()
-	userID, ok := c.Get(auth.UserIDContextKey).(int32)
+	userID, ok := c.Get(userIDContextKey).(int32)
 	if !ok {
 		return echo.NewHTTPError(http.StatusUnauthorized, "Missing user in session")
 	}
