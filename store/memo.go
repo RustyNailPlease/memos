@@ -292,6 +292,13 @@ func (s *Store) ListMemos(ctx context.Context, find *FindMemo) ([]*Memo, error) 
 	return list, nil
 }
 
+func (s *Store) HookSyncMemo(memoId int32) {
+	HookTriggers <- HookTrigger{
+		MemoID:   memoId,
+		HookType: HOOK_MODIFIED,
+	}
+}
+
 func (s *Store) GetMemo(ctx context.Context, find *FindMemo) (*Memo, error) {
 	list, err := s.ListMemos(ctx, find)
 	if err != nil {

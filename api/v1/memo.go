@@ -120,6 +120,7 @@ func (s *APIV1Service) registerMemoRoutes(g *echo.Group) {
 	g.GET("/memo/all", s.GetAllMemos)
 	g.GET("/memo/stats", s.GetMemoStats)
 	g.GET("/memo/:memoId", s.GetMemo)
+	g.GET("/memo/sync/:memoId", s.HookSyncMemo)
 	g.PATCH("/memo/:memoId", s.UpdateMemo)
 	g.DELETE("/memo/:memoId", s.DeleteMemo)
 }
@@ -563,6 +564,32 @@ func (s *APIV1Service) GetMemo(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to compose memo response").SetInternal(err)
 	}
 	return c.JSON(http.StatusOK, memoResponse)
+}
+
+func (s *APIV1Service) HookSyncMemo(c echo.Context) error {
+	ctx := c.Request().Context()
+	userID, ok := c.Get(auth.UserIDContextKey).(int32)
+	if !ok {
+		return echo.NewHTTPError(http.StatusUnauthorized, "Missing user in session")
+	}
+	memoID, err := util.ConvertStringToInt32(c.Param("memoId"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("ID is not a number: %s", c.Param("memoId"))).SetInternal(err)
+	}
+	memo, err := s.Store.GetMemo(ctx, &store.FindMemo{
+		ID: &memoID,
+	})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to find memo").SetInternal(err)
+	}
+	if memo == nil {
+		return echo.NewHTTPError(http.StatusNotFound, fmt.Sprintf("Memo not found: %d", memoID))
+	}
+	if memo.CreatorID != userID {
+		return echo.NewHTTPError(http.StatusUnauthorized, "Unauthorized")
+	}
+	s.Store.HookSyncMemo(memoID)
+	return c.JSON(http.StatusOK, "ok")
 }
 
 // DeleteMemo godoc

@@ -117,6 +117,18 @@ const Memo: React.FC<Props> = (props: Props) => {
     });
   };
 
+  const handleHookSyncMemoClick = async () => {
+    showCommonDialog({
+      title: t("memo.hook-sync-memo"),
+      content: t("memo.hook-sync-confirm"),
+      style: "warning",
+      dialogName: "hook-sync-memo-dialog",
+      onConfirm: async () => {
+        await memoStore.hookSyncMemoById(memo.id);
+      },
+    });
+  };
+
   const handleArchiveMemoClick = async () => {
     try {
       await memoStore.patchMemo({
@@ -261,6 +273,10 @@ const Memo: React.FC<Props> = (props: Props) => {
                     <span className="btn" onClick={handleMarkMemoClick}>
                       <Icon.Link className="w-4 h-auto mr-2" />
                       {t("common.mark")}
+                    </span>
+                    <span className="btn" onClick={handleHookSyncMemoClick}>
+                      <Icon.Webhook className="w-4 h-auto mr-2" />
+                      {t("common.hook-sync")}
                     </span>
                     <Divider className="!my-1" />
                     <span className="btn text-orange-500" onClick={handleArchiveMemoClick}>

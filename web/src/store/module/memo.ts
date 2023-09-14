@@ -127,5 +127,9 @@ export const useMemoStore = () => {
       store.dispatch(deleteMemo(memoId));
       memoCacheStore.deleteMemoCache(memoId);
     },
+
+    hookSyncMemoById: async (memoId: MemoId) => {
+      await api.hookSyncMemo(memoId);
+    }
   };
 };

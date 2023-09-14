@@ -139,6 +139,9 @@ export function deleteMemo(memoId: MemoId) {
   return axios.delete(`/api/v1/memo/${memoId}`);
 }
 
+export function hookSyncMemo(memoId: MemoId) {
+  return axios.get(`/api/v1/memo/sync/${memoId}`);
+}
 
 export function createMemoHook(hookCreate: MemoHookCreate) {
   return axios.post<MemoHook>("/api/v1/memohook", hookCreate);
